@@ -70,9 +70,12 @@ static char *escape_json_string(const char *input) {
   return out;
 }
 
-char *llm_generate_response(const char *prompt, const char *model_name, const char *ollama_url) {
+char *llm_generate_response(const char *prompt,
+                            const char *model_name,
+                            long timeout_seconds) {
   const char *resolved_model = model_name != NULL ? model_name : "deepseek-r1:1.5b";
-  const char *resolved_url = ollama_url != NULL ? ollama_url : "http://localhost:11434/api/generate";
+  const char *resolved_url = "http://127.0.0.1:11434/api/generate";
+  long resolved_timeout = timeout_seconds > 0 ? timeout_seconds : 600L;
   char *escaped_prompt = NULL;
   char *payload = NULL;
   char *http_response = NULL;
@@ -102,7 +105,7 @@ char *llm_generate_response(const char *prompt, const char *model_name, const ch
            "{\"model\":\"%s\",\"prompt\":\"%s\",\"stream\":false}",
            resolved_model, escaped_prompt);
 
-  http_response = http_post_json(resolved_url, payload, 180);
+  http_response = http_post_json(resolved_url, payload, resolved_timeout);
   if (http_response == NULL) {
     free(escaped_prompt);
     free(payload);

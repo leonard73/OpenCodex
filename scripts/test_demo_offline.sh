@@ -128,4 +128,4 @@ if [[ "${MODE}" == "chat" ]]; then
 fi
 
 echo "[offline] Single response via OpenCodex chat binary"
-exec "${CHAT_BIN}" --model "${MODEL_NAME}" --url "${BASE_URL}/api/generate" "${PROMPT}"
+exec "${CHAT_BIN}" --local-model "${MODEL_PATH}" --local-model-name "${MODEL_NAME}" --timeout 1200 "${PROMPT}"

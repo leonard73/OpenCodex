@@ -23,8 +23,6 @@ MODELS_DIR := models
 MODEL_FILENAME ?= DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf
 MODEL_PATH := $(MODELS_DIR)/$(MODEL_FILENAME)
 MODEL_URL ?= https://huggingface.co/bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/main/$(MODEL_FILENAME)?download=true
-OLLAMA_MODEL ?= deepseek-r1:1.5b
-OLLAMA_URL ?= http://localhost:11434/api/generate
 OFFLINE_MODEL_PATH ?= /home/pan/work/github_ai/llm_modes/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf
 OFFLINE_OLLAMA_MODEL ?= opencodex-local-deepseek-r1-1_5b-q4
 OFFLINE_OLLAMA_BASE_URL ?= http://127.0.0.1:11434
@@ -61,7 +59,7 @@ PACKAGE_NAME := OpenCodex-src-$(VERSION).tar.gz
 
 .PHONY: all build clean download install uninstall dependencies test_demo_chat test_demo_codex test_demo_offline \
 	offline_chat_codegen offline_chat_codes offline_chat_ubuntu_cmd_gen offline_char_ubuntu_cmd_gen \
-	offline_chat_debugger offline_chat_explain_c build_debug valgrind_chat valgrind_codex benchmark package memory_baseline dirs check_ollama
+	offline_chat_debugger offline_chat_explain_c test_demo_codex_local build_debug valgrind_chat valgrind_codex benchmark package memory_baseline dirs check_ollama
 
 all: build
 
@@ -119,23 +117,29 @@ memory_baseline: $(MEMORY_BIN)
 	./$(MEMORY_BIN)
 
 check_ollama:
-	@tags_url="$$(printf '%s\n' "$(OLLAMA_URL)" | sed 's#/api/generate$$#/api/tags#')"; \
-	if ! command -v curl >/dev/null 2>&1; then \
-		echo "Error: curl is required to check Ollama API availability." >&2; \
+	@if ! command -v curl >/dev/null 2>&1; then \
+		echo "Error: curl is required to check local Ollama API." >&2; \
 		exit 1; \
 	fi; \
-	if ! curl -fsS "$$tags_url" >/dev/null 2>&1; then \
-		echo "Error: Ollama API is not reachable at $$tags_url" >&2; \
+	if ! curl -fsS "http://127.0.0.1:11434/api/tags" >/dev/null 2>&1; then \
+		echo "Error: local Ollama API is not reachable at http://127.0.0.1:11434/api/tags" >&2; \
 		echo "Start it with: OLLAMA_HOST=127.0.0.1:11434 ollama serve" >&2; \
-		echo "Or run local GGUF test: make test_demo_offline" >&2; \
 		exit 1; \
 	fi
 
 test_demo_chat: build check_ollama
-	./$(CHAT_BIN) --model "$(OLLAMA_MODEL)" --url "$(OLLAMA_URL)" "Say hello from OpenCodex in one sentence."
+	./$(CHAT_BIN) --local-model "$(OFFLINE_MODEL_PATH)" --local-model-name "$(OFFLINE_OLLAMA_MODEL)" --local-recreate --timeout 1200 "Say hello from OpenCodex in one sentence."
 
 test_demo_codex: build check_ollama
-	./$(CODEX_BIN) --model "$(OLLAMA_MODEL)" --url "$(OLLAMA_URL)" --prompt "Write a tiny bash script that echoes OpenCodex ready." --output "$(BUILD_DIR)/demo_output.sh" --yes
+	./$(CODEX_BIN) --local-model "$(OFFLINE_MODEL_PATH)" --local-model-name "$(OFFLINE_OLLAMA_MODEL)" --local-recreate --timeout 1200 --prompt "Write a tiny bash script that echoes OpenCodex ready." --output "$(BUILD_DIR)/demo_output.sh" --yes
+
+test_demo_codex_local: build
+	./$(CODEX_BIN) --local-model "$(OFFLINE_MODEL_PATH)" \
+		--local-model-name "opencodex-local-coding" \
+		--local-recreate \
+		--timeout 1200 \
+		--prompt "Write a C function compute_pi_nilakantha(unsigned long long iterations) without external libraries and include a short main demo." \
+		--output "$(BUILD_DIR)/demo_local_codegen.c" --yes
 
 test_demo_offline: build
 	OFFLINE_MODEL_PATH="$(OFFLINE_MODEL_PATH)" \
@@ -199,6 +203,8 @@ offline_chat_ubuntu_cmd_gen:
 		OFFLINE_NUM_PREDICT=700 \
 		OFFLINE_SYSTEM_PROMPT="You are an Ubuntu CLI expert. Return safe, minimal shell commands with one-line explanations. Ask confirmation before destructive commands. No internal reasoning."
 
+offline_char_ubuntu_cmd_gen: offline_chat_ubuntu_cmd_gen
+
 offline_chat_debugger:
 	$(MAKE) test_demo_offline \
 		OFFLINE_BACKEND=ollama \
@@ -231,17 +237,17 @@ build_debug:
 	$(MAKE) CFLAGS="$(DBG_CFLAGS)" clean build
 
 valgrind_chat: build_debug
-	valgrind --leak-check=full --show-leak-kinds=all ./$(CHAT_BIN) --model "$(OLLAMA_MODEL)" --url "$(OLLAMA_URL)" "ping"
+	valgrind --leak-check=full --show-leak-kinds=all ./$(CHAT_BIN) --local-model "$(OFFLINE_MODEL_PATH)" --local-model-name "$(OFFLINE_OLLAMA_MODEL)" --timeout 1200 "ping"
 
 valgrind_codex: build_debug
-	valgrind --leak-check=full --show-leak-kinds=all ./$(CODEX_BIN) --model "$(OLLAMA_MODEL)" --url "$(OLLAMA_URL)" --prompt "write a hello world c file" --output "$(BUILD_DIR)/valgrind_output.c" --yes
+	valgrind --leak-check=full --show-leak-kinds=all ./$(CODEX_BIN) --local-model "$(OFFLINE_MODEL_PATH)" --local-model-name "$(OFFLINE_OLLAMA_MODEL)" --timeout 1200 --prompt "write a hello world c file" --output "$(BUILD_DIR)/valgrind_output.c" --yes
 
 benchmark: build
-	/usr/bin/time -f "chat latency: %e sec" ./$(CHAT_BIN) --model "$(OLLAMA_MODEL)" --url "$(OLLAMA_URL)" "ping"
-	/usr/bin/time -f "codex latency: %e sec" ./$(CODEX_BIN) --model "$(OLLAMA_MODEL)" --url "$(OLLAMA_URL)" --prompt "write a hello world c file" --output "$(BUILD_DIR)/bench_output.c" --yes
+	/usr/bin/time -f "chat latency: %e sec" ./$(CHAT_BIN) --local-model "$(OFFLINE_MODEL_PATH)" --local-model-name "$(OFFLINE_OLLAMA_MODEL)" --timeout 1200 "ping"
+	/usr/bin/time -f "codex latency: %e sec" ./$(CODEX_BIN) --local-model "$(OFFLINE_MODEL_PATH)" --local-model-name "$(OFFLINE_OLLAMA_MODEL)" --timeout 1200 --prompt "write a hello world c file" --output "$(BUILD_DIR)/bench_output.c" --yes
 	@if command -v perf >/dev/null 2>&1; then \
 		echo "Running perf stat for coding tool"; \
-		perf stat ./$(CODEX_BIN) --model "$(OLLAMA_MODEL)" --url "$(OLLAMA_URL)" --prompt "write one function in c" --output "$(BUILD_DIR)/perf_output.c" --yes >/dev/null; \
+		perf stat ./$(CODEX_BIN) --local-model "$(OFFLINE_MODEL_PATH)" --local-model-name "$(OFFLINE_OLLAMA_MODEL)" --timeout 1200 --prompt "write one function in c" --output "$(BUILD_DIR)/perf_output.c" --yes >/dev/null; \
 	else \
 		echo "perf not available; skipping perf profiling"; \
 	fi
