@@ -53,3 +53,8 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# OpenCodex build outputs and local models
+build/
+models/.dir
+models/*.gguf
